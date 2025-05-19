@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Advanced Screen Recorder</title>
-  <style id="theme-style">
+  <title>Screen Recorder with Pause/Resume</title>
+  <style>
     body {
       font-family: sans-serif;
       padding: 20px;
@@ -15,119 +15,45 @@
       padding: 10px 20px;
       font-size: 16px;
     }
-    canvas {
-      position: fixed;
-      top: 0;
-      left: 0;
-      pointer-events: none;
-    }
-    .light-theme {
-      background: #f5f5f5;
-      color: #111;
+    #status {
+      margin-top: 10px;
+      font-style: italic;
     }
   </style>
 </head>
 <body>
-  <h2>📹 Advanced Screen Recorder</h2>
+  <h2>📹 Screen Recorder</h2>
   <button id="startBtn">Start Recording</button>
   <button id="pauseBtn" disabled>Pause</button>
   <button id="resumeBtn" disabled>Resume</button>
   <button id="stopBtn" disabled>Stop Recording</button>
-  <button id="themeBtn">Toggle Theme</button>
-  <p>🎤 Mic Status: <span id="micStatus">Unknown</span></p>
-  <p>⏱️ Timer: <span id="timer">00:00</span></p>
+  <div id="status">Idle</div>
   <video id="preview" controls style="display:none; width: 100%; margin-top: 20px;"></video>
-  <video id="webcam" autoplay muted style="position: fixed; bottom: 10px; right: 10px; width: 200px; border: 2px solid white;"></video>
-  <canvas id="drawingCanvas"></canvas>
 
   <script>
+    let mediaRecorder;
+    let recordedChunks = [];
+
     const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
     const pauseBtn = document.getElementById('pauseBtn');
     const resumeBtn = document.getElementById('resumeBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const themeBtn = document.getElementById('themeBtn');
-    const micStatus = document.getElementById('micStatus');
-    const timerDisplay = document.getElementById('timer');
+    const status = document.getElementById('status');
     const video = document.getElementById('preview');
-    const webcam = document.getElementById('webcam');
-    const canvas = document.getElementById('drawingCanvas');
-    const ctx = canvas.getContext('2d');
-
-    let mediaRecorder, recordedChunks = [], startTime, timerInterval;
-
-    const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    window.onresize = resizeCanvas;
-    resizeCanvas();
-
-    // Drawing logic
-    let drawing = false;
-    canvas.style.pointerEvents = 'auto';
-    canvas.onmousedown = e => { drawing = true; ctx.beginPath(); ctx.moveTo(e.clientX, e.clientY); };
-    canvas.onmousemove = e => {
-      if (drawing) {
-        ctx.lineTo(e.clientX, e.clientY);
-        ctx.stroke();
-      }
-    };
-    canvas.onmouseup = () => drawing = false;
-
-    // Theme toggle
-    const updateTheme = (theme) => {
-      if (theme === 'light') {
-        document.body.classList.add('light-theme');
-      } else {
-        document.body.classList.remove('light-theme');
-      }
-      localStorage.setItem('theme', theme);
-    };
-    themeBtn.onclick = () => {
-      const newTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
-      updateTheme(newTheme);
-    };
-    updateTheme(localStorage.getItem('theme') || 'dark');
-
-    // Timer
-    const startTimer = () => {
-      startTime = Date.now();
-      timerInterval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-        const secs = String(elapsed % 60).padStart(2, '0');
-        timerDisplay.textContent = `${mins}:${secs}`;
-      }, 1000);
-    };
-    const stopTimer = () => clearInterval(timerInterval);
-
-    // Mic check
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then(stream => {
-        micStatus.textContent = 'Active';
-        stream.getTracks().forEach(t => t.stop());
-      })
-      .catch(() => micStatus.textContent = 'Muted');
-
-    // Webcam preview
-    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
-      webcam.srcObject = stream;
-    });
 
     startBtn.onclick = async () => {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mixedAudio = new MediaStream([...screenStream.getAudioTracks(), ...micStream.getAudioTracks()]);
-
-      const combinedStream = new MediaStream([
-        ...screenStream.getVideoTracks(),
-        ...mixedAudio.getAudioTracks()
-      ]);
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true
+      });
 
       recordedChunks = [];
-      mediaRecorder = new MediaRecorder(combinedStream);
+      mediaRecorder = new MediaRecorder(stream);
 
-      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
+
       mediaRecorder.onstop = () => {
         const blob = new Blob(recordedChunks, { type: 'video/webm' });
         const url = URL.createObjectURL(blob);
@@ -140,36 +66,36 @@
         a.click();
       };
 
+      mediaRecorder.onpause = () => status.textContent = 'Paused';
+      mediaRecorder.onresume = () => status.textContent = 'Recording...';
+
       mediaRecorder.start();
-      startTimer();
+      status.textContent = 'Recording...';
+
       startBtn.disabled = true;
       stopBtn.disabled = false;
       pauseBtn.disabled = false;
     };
 
     pauseBtn.onclick = () => {
-      if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.pause();
-        pauseBtn.disabled = true;
-        resumeBtn.disabled = false;
-      }
+      mediaRecorder.pause();
+      pauseBtn.disabled = true;
+      resumeBtn.disabled = false;
     };
 
     resumeBtn.onclick = () => {
-      if (mediaRecorder && mediaRecorder.state === 'paused') {
-        mediaRecorder.resume();
-        pauseBtn.disabled = false;
-        resumeBtn.disabled = true;
-      }
+      mediaRecorder.resume();
+      pauseBtn.disabled = false;
+      resumeBtn.disabled = true;
     };
 
     stopBtn.onclick = () => {
       mediaRecorder.stop();
-      stopTimer();
       startBtn.disabled = false;
       stopBtn.disabled = true;
       pauseBtn.disabled = true;
       resumeBtn.disabled = true;
+      status.textContent = 'Stopped';
     };
   </script>
 </body>
