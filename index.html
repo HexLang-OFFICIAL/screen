@@ -47,15 +47,9 @@
           video: true,
           audio: true
         });
-
-        const micStream = await navigator.mediaDevices.getUserMedia({
-          audio: true
-        });
-
         const combinedStream = new MediaStream([
           ...screenStream.getVideoTracks(),
           ...screenStream.getAudioTracks(),
-          ...micStream.getAudioTracks()
         ]);
 
         recordedChunks = [];
